@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Game Store</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+:root{--line:rgba(255,255,255,.12);--card:rgba(255,255,255,.06);--mut:#9aa3b2;--acc:#1f7cf0}
+*{box-sizing:border-box;margin:0}
+body{background:radial-gradient(circle at 50% 0,#1b2230,#0b0e14 70%) fixed;color:#f2f4f8;font:15px/1.35 system-ui,sans-serif;min-height:100vh;padding:14px}
+#app{max-width:480px;margin:auto}
+.card{border:1px solid var(--line);border-radius:24px;background:var(--card);padding:16px;display:grid;gap:10px}
+.row,input,.box{border:1px solid var(--line);border-radius:16px;background:var(--card);padding:13px;color:inherit;font:inherit;width:100%}
+.row{display:flex;align-items:center;gap:12px;cursor:pointer}
+.row:active,.btn:active{transform:scale(.98)}
+.row>div{flex:1}small,.mut{color:var(--mut);font-size:12px;display:block}
+.top{display:flex;align-items:center;gap:12px}
+.logo,i{width:44px;height:44px;border-radius:12px;background:#2a303c;display:grid;place-items:center;font:700 20px system-ui}
+.pill{margin-left:auto;font-size:12px;padding:5px 10px;border-radius:99px;border:1px solid var(--line)}
+.pill:first-letter{color:#3ddc84}
+h1{font-size:30px;line-height:1.1;margin-top:6px}h2{font-size:24px}
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.tiles .row,.two .row{justify-content:center;font-weight:600}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.btn{border:0;border-radius:14px;padding:14px;background:var(--acc);color:#fff;font:700 15px system-ui;width:100%;cursor:pointer}
+.btn.alt{background:var(--card);border:1px solid var(--line)}
+.sw{display:grid;grid-template-columns:1fr 1fr;gap:10px}.sw .btn{padding:12px;font-size:13px}.sw .off{background:var(--card);border:1px solid var(--line);color:#cfd5df}
+.kv{display:flex;justify-content:space-between;margin:5px 0}.kv b{text-align:right}
+.hd{display:flex;align-items:center;gap:12px}.hd .row{width:44px;padding:0;height:44px;justify-content:center}
+.list{max-height:62vh;overflow:auto;display:grid;gap:10px}
+.tot{font-size:17px;font-weight:700;border-top:1px solid var(--line);padding-top:10px}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+</style></head><body><div id="app"></div>
+<script>
+// ====== НАСТРОЙКИ (замените под себя) ======
+const STORE={name:'Your Store',sub:'Цифровые товары'};
+const TARIFF=[[100,40],[10,45],[0,50]]; // [от N кк, ₽ за 1 кк] — по убыванию
+const SELL=30;                          // ₽ за 1 кк при продаже (пример)
+const PROMO={START10:10};               // промокод -> % скидки (для превью; итог считает бот)
+const INFO={'Как заказать':'1) Выберите игру и сервер. 2) Укажите ник и количество. 3) Нажмите «Купить» — оператор свяжется с вами.',
+ 'Доставка':'Выдача трейдом или банком, обычно в течение 5–30 минут.','Возврат':'Если заказ не выполнен — вернём оплату полностью.',
+ 'Поддержка':'Напишите нам: @your_support','О сервисе':'Независимый сервис. Названия игр используются только для обозначения.'};
+const GAMES={'BLACK RUSSIA':{ico:'🐻',servers:['RED','GREEN','BLUE','YELLOW','ORANGE','PURPLE','LIME']},
+ 'MATRESHKA RP':{ico:'🪆',servers:['Сервер 1','Сервер 2','Сервер 3']},
+ 'GTA 5 RP':{ico:'⭐',servers:['Сервер 1','Сервер 2','Сервер 3']},
+ 'STANDOFF 2':{ico:'🔫',servers:['Сервер 1','Сервер 2']}};
+// ===========================================
+const tg=window.Telegram?.WebApp;tg?.ready();tg?.expand();
+const app=document.getElementById('app'),S={game:'',mode:'buy',server:'',method:'trade'};
+let hist=['home'];
+const rate=k=>S.mode=='sell'?SELL:TARIFF.find(t=>k>=t[0])[1];
+const rub=n=>Math.round(n).toLocaleString('ru')+' ₽';
+const hd=(s,t)=>`<div class="hd"><div class="row" data-back>←</div><div><small>${s}</small><h2>${t}</h2></div></div>`;
+const V={
+home:()=>`<div class="card"><div class="top"><div class="logo">${STORE.name[0]}</div><div><b>${STORE.name}</b><small>${STORE.sub}</small></div><span class="pill">● На связи</span></div>
+<h1>Игровая валюта.<br>Просто и быстро.</h1><p class="mut">Выберите игру — всё остальное займёт пару минут.</p>
+${Object.entries(GAMES).map(([n,g])=>`<div class="row" data-game="${n}"><i>${g.ico}</i><div><b>${n}</b><small>Оформление заказа на игровую валюту</small></div>›</div>`).join('')}
+<div class="tiles">${['Как заказать','Доставка','Возврат'].map(k=>`<div class="row" data-info="${k}">${k}</div>`).join('')}</div>
+<div class="two"><div class="row" data-info="Поддержка">Поддержка</div><div class="row" data-info="О сервисе">О сервисе</div></div></div>`,
+mode:()=>`<div class="card">${hd('Выбор действия',S.game)}<button class="btn" data-mode="buy">КУПИТЬ ВИРТЫ</button><button class="btn alt" data-mode="sell">ПРОДАТЬ ВИРТЫ</button></div>`,
+servers:()=>`<div class="card">${hd(S.mode=='buy'?'Купить валюту':'Продать валюту','Выбор сервера')}<input id="q" placeholder="Поиск сервера…"><div class="list" id="sl"></div></div>`,
+form:()=>`<div class="card">${hd('Оформление заказа',S.mode=='buy'?'Купить вирты':'Продать вирты')}
+<div class="box"><div class="kv"><span class="mut">Игра</span><b>${S.game}</b></div><div class="kv"><span class="mut">Сервер</span><b>${S.server}</b></div><div class="kv"><span class="mut">Получение</span><b id="mv"></b></div></div>
+<input id="nick" placeholder="Введите игровой ник">
+<div class="box"><small style="margin-bottom:8px;color:#fff;font-weight:600">Способ получения</small><div class="sw"><button class="btn" data-m="trade" id="mt">Получить трейдом</button><button class="btn" data-m="bank" id="mb">Получить банком</button></div></div>
+<input id="promo" placeholder="Промокод (необязательно)">
+<div class="pair"><div><small>Количество валюты (кк)</small><input id="kk" inputmode="decimal" placeholder="Например, 10"></div><div><small>Сумма оплаты (₽)</small><input id="sum" inputmode="decimal" placeholder="Например, 450"></div></div>
+<div class="box"><b>Тарифы и скидки</b>${S.mode=='buy'?`<div class="kv"><span>до 9,99 кк</span><b>${TARIFF[2][1]} ₽ / 1кк</b></div><div class="kv"><span>от 10 кк</span><b>${TARIFF[1][1]} ₽ / 1кк</b></div><div class="kv"><span>от 100 кк</span><b>${TARIFF[0][1]} ₽ / 1кк</b></div>`:`<div class="kv"><span>Выкуп</span><b>${SELL} ₽ / 1кк</b></div>`}</div>
+<div class="box"><div class="kv"><span class="mut">Курс</span><b id="r">—</b></div><div class="kv"><span class="mut">Сумма без промокода</span><b id="t">0 ₽</b></div><div class="kv"><span class="mut">Скидка по промокоду</span><b id="d">0 ₽</b></div><div class="kv tot"><span>К оплате</span><b id="p">0 ₽</b></div></div>
+<button class="btn" id="go">${S.mode=='buy'?'КУПИТЬ':'ПРОДАТЬ'}</button></div>`};
+function render(){app.innerHTML=V[hist.at(-1)]();const v=hist.at(-1);
+ if(v=='servers')list('');if(v=='form')setM(S.method);
+ tg&&(hist.length>1?tg.BackButton.show():tg.BackButton.hide())}
+const go=v=>{hist.push(v);render()},back=()=>{hist.length>1&&hist.pop();render()};
+tg?.BackButton.onClick(back);
+const list=q=>document.getElementById('sl').innerHTML=GAMES[S.game].servers.filter(s=>s.toLowerCase().includes(q.toLowerCase()))
+ .map(s=>`<div class="row" data-server="${s}"><div><b>${s}</b><small>Нажми, чтобы перейти к оформлению</small></div></div>`).join('');
+const setM=m=>{S.method=m;mv.textContent=m=='trade'?'Трейдом':'Банком';mt.className='btn'+(m=='trade'?'':' off');mb.className='btn'+(m=='bank'?'':' off')};
+function calc(){const k=+kk.value.replace(',','.')||0,tot=k*(k?rate(k):0),pc=PROMO[promo.value.trim().toUpperCase()]||0,d=S.mode=='buy'?tot*pc/100:0;
+ r.textContent=k?rate(k)+' ₽/1кк':'—';t.textContent=rub(tot);d_.textContent=rub(d);p.textContent=rub(tot-d)}
+app.onclick=e=>{const el=e.target.closest('[data-game],[data-mode],[data-server],[data-info],[data-m],[data-back],#go');if(!el)return;const D=el.dataset;
+ if('back' in D)return back();
+ if(D.game){S.game=D.game;go('mode')}else if(D.mode){S.mode=D.mode;go('servers')}else if(D.server){S.server=D.server;go('form')}
+ else if(D.info){tg?tg.showAlert(INFO[D.info]):alert(INFO[D.info])}else if(D.m){setM(D.m)}
+ else if(el.id=='go'){const k=+kk.value.replace(',','.'),nick=document.getElementById('nick').value.trim();
+  if(!nick||!(k>0)){const m='Введите ник и количество валюты';return tg?tg.showAlert(m):alert(m)}
+  const o={game:S.game,server:S.server,mode:S.mode,method:S.method,nick,kk:k,promo:promo.value.trim()};
+  tg?tg.sendData(JSON.stringify(o)):console.log(o)}};
+app.oninput=e=>{const id=e.target.id;if(id=='q')return list(e.target.value);if(!document.getElementById('kk'))return;
+ if(id=='sum'){const s=+sum.value.replace(',','.')||0,tiers=S.mode=='sell'?[[0,SELL]]:TARIFF;
+  for(const[m,pr]of tiers){const k=s/pr;if(k>=m){kk.value=s?+k.toFixed(2):'';break}}}
+ else if(id=='kk'){const k=+kk.value.replace(',','.')||0;sum.value=k?Math.round(k*rate(k)):''}
+ calc()};
+// элементы с id доступны как глобальные переменные; d_ — алиас для #d
+Object.defineProperty(window,'d_',{get:()=>document.getElementById('d')});
+render();
+</script></body></html>
